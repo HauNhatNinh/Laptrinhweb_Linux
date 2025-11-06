@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IOT Dashboard - haunhatninh.com</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; transition: max-width 0.3s ease-in-out; }
+        .dashboard-container { max-width: 900px; }
+        
+        /* --- CSS chung cho Form --- */
+        input { width: calc(100% - 22px); padding: 10px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; }
+        button { width: 100%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        h2 { text-align: center; margin-top: 0; }
+        .error-message { color: red; margin-top: 10px; text-align: center; }
+        .success-message { color: green; margin-top: 10px; text-align: center; }
+        .toggle-link { color: #007bff; text-decoration: none; cursor: pointer; display: block; text-align: center; margin-top: 1rem; }
+        .toggle-link:hover { text-decoration: underline; }
+
+        /* --- Views (Login, Register, Dashboard) --- */
+        #login-view { display: none; }
+        #register-view { display: none; }
+        #dashboard-view { display: none; }
+        
+        /* --- Dashboard View --- */
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .dashboard-header button { background-color: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        .sensor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+        .sensor-card { background-color: #f9f9f9; border: 1px solid #ddd; padding: 1.5rem; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .sensor-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); transform: translateY(-3px); }
+        .sensor-value { font-size: 2.5rem; font-weight: bold; margin: 10px 0; }
+        .sensor-unit { font-size: 1.2rem; color: #555; }
+        .sensor-time { font-size: 0.8rem; color: #888; margin-top: 10px; }
+
+        /* --- Modal Grafana --- */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 900px; border-radius: 8px; position: relative; }
+        .close-button { color: #aaa; position: absolute; right: 15px; top: 5px; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .modal-content iframe { width: 100%; height: 450px; border: none; }
+    </style>
+</head>
+<body>
+
+    <div id="app-container" class="container">
+
+        <div id="login-view">
+            <h2>Đăng nhập Hệ thống IOT</h2>
+            <form id="login-form">
+                <input type="text" id="login-username" placeholder="Tên đăng nhập (admin)" required>
+                <input type="password" id="login-password" placeholder="Mật khẩu (admin123)" required>
+                <button type="submit">Đăng nhập</button>
+                <p id="login-error" class="error-message"></p>
+                <a id="show-register-link" class="toggle-link">Chưa có tài khoản? Đăng ký</a>
+            </form>
+        </div>
+
+        <div id="register-view">
+            <h2>Đăng ký tài khoản</h2>
+            <form id="register-form">
+                <input type="text" id="register-fullname" placeholder="Họ và Tên" required>
+                <input type="text" id="register-username" placeholder="Tên đăng nhập" required>
+                <input type="password" id="register-password" placeholder="Mật khẩu" required>
+                <button type="submit">Đăng ký</button>
+                <p id="register-message" class="error-message"></p>
+                <a id="show-login-link" class="toggle-link">Đã có tài khoản? Đăng nhập</a>
+            </form>
+        </div>
+
+        <div id="dashboard-view">
+            <div class="dashboard-header">
+                <h2>Chào, <span id="user-fullname"></span>!</h2>
+                <button id="logout-button">Đăng xuất</button>
+            </div>
+            
+            <h3>Giá trị Cảm biến Mới nhất (Click để xem lịch sử)</h3>
+            <div id="sensor-grid-container" class="sensor-grid">
+                <div id="card-temp" class="sensor-card">
+                    <h3>Nhiệt độ Phòng</h3>
+                    <div id="sensor-temp" class="sensor-value">--</div>
+                    <div class="sensor-unit">°C</div>
+                    <div id="time-temp" class="sensor-time">...</div>
+                </div>
+                <div id="card-humid" class="sensor-card">
+                    <h3>Độ ẩm Phòng</h3>
+                    <div id="sensor-humid" class="sensor-value">--</div>
+                    <div class="sensor-unit">%</div>
+                    <div id="time-humid" class="sensor-time">...</div>
+                </div>
+            </div>
+        </div>
+
+    </div> <div id="chart-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-modal-button">&times;</span>
+            <h3>Biểu đồ Lịch sử</h3>
+            <div id="grafana-iframe-container">
+                 <p style="color:red; font-weight: bold;">BẠN CHƯA DÁN IFRAME TỪ GRAFANA VÀO ĐÂY</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === KHAI BÁO BIẾN ===
+        const loginView = document.getElementById('login-view');
+        const registerView = document.getElementById('register-view');
+        const dashboardView = document.getElementById('dashboard-view');
+        const appContainer = document.getElementById('app-container');
+
+        const loginForm = document.getElementById('login-form');
+        const loginError = document.getElementById('login-error');
+        const registerForm = document.getElementById('register-form');
+        const registerMessage = document.getElementById('register-message');
+        
+        const showRegisterLink = document.getElementById('show-register-link');
+        const showLoginLink = document.getElementById('show-login-link');
+        
+        const logoutButton = document.getElementById('logout-button');
+        const userFullname = document.getElementById('user-fullname');
+        
+        const sensorTemp = document.getElementById('sensor-temp');
+        const sensorHumid = document.getElementById('sensor-humid');
+        const timeTemp = document.getElementById('time-temp');
+        const timeHumid = document.getElementById('time-humid');
+        
+        const modal = document.getElementById('chart-modal');
+        const closeModalButton = document.getElementById('close-modal-button');
+        const cardTemp = document.getElementById('card-temp');
+        const cardHumid = document.getElementById('card-humid');
+        
+        let dataFetchInterval; 
+
+        // === HÀM CHÍNH: KIỂM TRA PHIÊN ĐĂNG NHẬP ===
+        function checkLoginState() {
+            const user = localStorage.getItem('iot_user');
+            if (user) {
+                const userData = JSON.parse(user);
+                showDashboard(userData);
+            } else {
+                showLogin();
+            }
+        }
+
+        // === HÀM XỬ LÝ LOGIN ===
+        async function handleLogin(event) {
+            event.preventDefault(); 
+            loginError.textContent = '';
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            const password_hash = CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+
+            try {
+                const response = await fetch('/nodered/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password_hash })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    localStorage.setItem('iot_user', JSON.stringify(data.user));
+                    showDashboard(data.user);
+                } else {
+                    loginError.textContent = data.message || 'Lỗi đăng nhập.';
+                }
+            } catch (err) {
+                loginError.textContent = 'Lỗi kết nối máy chủ.';
+            }
+        }
+
+        // === HÀM XỬ LÝ REGISTER (MỚI) ===
+        async function handleRegister(event) {
+            event.preventDefault();
+            registerMessage.textContent = '';
+
+            const full_name = document.getElementById('register-fullname').value;
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+
+            if (!full_name || !username || !password) {
+                registerMessage.textContent = 'Vui lòng điền đầy đủ thông tin.';
+                return;
+            }
+
+            // Mã hoá mật khẩu
+            const password_hash = CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+
+            try {
+                // Gọi API /register (Flow 4)
+                const response = await fetch('/nodered/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_name, username, password_hash })
+                });
+                const data = await response.json();
+
+                if (response.ok || response.status === 201) {
+                    // Đăng ký thành công
+                    registerMessage.classList.remove('error-message');
+                    registerMessage.classList.add('success-message');
+                    registerMessage.textContent = data.message + " Bạn sẽ được chuyển về trang đăng nhập.";
+                    
+                    // Tự động chuyển về trang login sau 3s
+                    setTimeout(() => {
+                        showLogin();
+                    }, 3000);
+                } else {
+                    // Đăng ký thất bại (ví dụ: trùng user)
+                    registerMessage.classList.add('error-message');
+                    registerMessage.classList.remove('success-message');
+                    registerMessage.textContent = data.message || 'Lỗi đăng ký.';
+                }
+            } catch (err) {
+                registerMessage.classList.add('error-message');
+                registerMessage.classList.remove('success-message');
+                registerMessage.textContent = 'Lỗi kết nối máy chủ.';
+            }
+        }
+
+
+        // === HÀM XỬ LÝ LOGOUT ===
+        function handleLogout() {
+            localStorage.removeItem('iot_user');
+            if (dataFetchInterval) clearInterval(dataFetchInterval);
+            showLogin();
+        }
+
+        // === CÁC HÀM HIỂN THỊ (Điều khiển SPA) ===
+        function showLogin() {
+            loginView.style.display = 'block';
+            registerView.style.display = 'none';
+            dashboardView.style.display = 'none';
+            appContainer.classList.remove('dashboard-container');
+            // Xoá thông báo cũ (nếu có)
+            registerMessage.textContent = '';
+            loginError.textContent = '';
+        }
+
+        function showRegister() {
+            loginView.style.display = 'none';
+            registerView.style.display = 'block';
+            dashboardView.style.display = 'none';
+            appContainer.classList.remove('dashboard-container');
+            // Xoá thông báo cũ (nếu có)
+            registerMessage.textContent = '';
+            loginError.textContent = '';
+        }
+
+        function showDashboard(user) {
+            loginView.style.display = 'none';
+            registerView.style.display = 'none';
+            dashboardView.style.display = 'block';
+            appContainer.classList.add('dashboard-container');
+            userFullname.textContent = user.full_name;
+            fetchLatestData();
+            dataFetchInterval = setInterval(fetchLatestData, 5000);
+        }
+
+        // === HÀM LẤY DỮ LIỆU CẢM BIẾN (Từ MariaDB) ===
+        async function fetchLatestData() {
+            try {
+                const response = await fetch('/nodered/latest-data');
+                const data = await response.json();
+                
+                const temp_data = data.find(s => s.sensor_id === 'temp_01');
+                const humid_data = data.find(s => s.sensor_id === 'humid_01');
+
+                if (temp_data) {
+                    sensorTemp.textContent = parseFloat(temp_data.value).toFixed(1);
+                    timeTemp.textContent = "Cập nhật: " + new Date(temp_data.last_updated).toLocaleString('vi-VN');
+                }
+                if (humid_data) {
+                    sensorHumid.textContent = parseFloat(humid_data.value).toFixed(1);
+                    timeHumid.textContent = "Cập nhật: " + new Date(humid_data.last_updated).toLocaleString('vi-VN');
+                }
+            } catch (err) {
+                console.error('Lỗi fetchLatestData:', err);
+            }
+        }
+        
+        // === CÁC HÀM MODAL (Grafana) ===
+        function showGrafana() {
+            modal.style.display = 'block';
+        }
+        function closeGrafana() {
+            modal.style.display = 'none';
+        }
+
+        // === GÁN SỰ KIỆN ===
+        loginForm.addEventListener('submit', handleLogin);
+        registerForm.addEventListener('submit', handleRegister); // (Mới)
+        logoutButton.addEventListener('click', handleLogout);
+        
+        // Chuyển đổi qua lại giữa Login và Register (Mới)
+        showRegisterLink.addEventListener('click', showRegister);
+        showLoginLink.addEventListener('click', showLogin);
+        
+        cardTemp.addEventListener('click', showGrafana);
+        cardHumid.addEventListener('click', showGrafana);
+        closeModalButton.addEventListener('click', closeGrafana);
+        window.addEventListener('click', (event) => {
+            if (event.target == modal) {
+                closeGrafana();
+            }
+        });
+
+        // === KHỞI CHẠY ỨNG DỤNG ===
+        checkLoginState();
+
+    </script>
+</body>
+</html>
