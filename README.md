@@ -1,5 +1,5 @@
 # Laptrinhweb_Linux
-## Cài đặt môi trường linux
+## Web IOT: Giám sát dữ liệu IOT
 ### Cài đặt Hạ tầng (Infrastructure):
 #### Môi trường (WSL/Ubuntu + Docker)
  - WSL / Ubuntu (Linux):
